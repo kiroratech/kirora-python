@@ -1,0 +1,53 @@
+name: Release
+
+# Publishes to PyPI when a v* tag matching src/kirora/version.py is pushed.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: tag matches the version
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/kirora/version.py)
+          test "v$version" = "$GITHUB_REF_NAME" || (echo "tag $GITHUB_REF_NAME, but the version is $version" && exit 1)
+      - run: pip install -e ".[dev]" build twine
+      - run: python scripts/codegen.py --check
+      - run: pytest
+      - run: python -m build
+      - run: twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      # PyPI trusted publishing: authenticates with GitHub's OIDC token, so no PyPI token
+      # is stored here.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

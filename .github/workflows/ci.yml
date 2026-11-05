@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request makes an older run pointless. Runs on main all
+# finish, so every commit there gets a result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Checks whose result doesn't depend on the Python version, so they run once.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -e ".[dev]"
+      - run: ruff format --check src tests scripts examples
+      - run: ruff check src tests scripts examples
+      - run: mypy
+      # The examples, checked as a user's code would be.
+      - run: mypy --strict examples
+      - run: pyright
+      - run: python scripts/codegen.py --check
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true
+      - run: pip install -e ".[dev]"
+      - run: pytest
+
+  # The oldest dependency versions pyproject.toml allows, so its lower bounds stay true.
+  minimum-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - run: pip install "httpx==0.23.0" "anyio==3.5.0" "typing-extensions==4.7.0" pytest pytest-asyncio
+      - run: pip install --no-deps -e .
+      - run: pytest
+
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check --strict dist/*
+      # The source archive alone, away from the checkout: it must build and pass its tests.
+      - name: test the extracted sdist
+        run: |
+          mkdir /tmp/sdist && tar xzf dist/*.tar.gz -C /tmp/sdist --strip-components=1
+          python -m venv /tmp/sdist-env
+          /tmp/sdist-env/bin/pip install "/tmp/sdist[dev]"
+          cd /tmp/sdist && /tmp/sdist-env/bin/pytest -p no:cacheprovider
+      # Installs the wheel as a consumer would, away from the source tree.
+      - name: import the built wheel
+        run: |
+          python -m venv /tmp/consumer
+          /tmp/consumer/bin/pip install dist/*.whl
+          cd /tmp && /tmp/consumer/bin/python -c "import kirora; kirora.Kirora('sk_test'); print(kirora.__version__)"
