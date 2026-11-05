@@ -29,7 +29,7 @@ send campaigns and transactional messages.
 
 ## Installation
 
-Requires **Python 3.9 or later**.
+Requires **Python 3.10 or later**.
 
 ```sh
 python -m pip install kirora
@@ -364,7 +364,7 @@ The [usage guide](docs/usage.md) covers:
 
 The SDK follows [semantic versioning](https://semver.org). While it's 0.x, a minor
 release can change the public API; the [changelog](CHANGELOG.md) says how. It supports
-CPython 3.9 and later, and is tested on 3.9 to 3.14.
+CPython 3.10 and later, and is tested on 3.10 to 3.14.
 
 ## Help and contributing
 

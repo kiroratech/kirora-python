@@ -9,7 +9,7 @@ description = "Kirora SDK for Python."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [{ name = "Kirora and contributors" }]
 keywords = ["kirora", "sdk", "api", "email", "push", "marketing", "transactional"]
 classifiers = [
@@ -18,7 +18,6 @@ classifiers = [
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -92,14 +91,14 @@ disallow_incomplete_defs = false
 
 [tool.pyright]
 include = ["src/kirora"]
-pythonVersion = "3.9"
+pythonVersion = "3.10"
 typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"
 
 [tool.ruff]
 line-length = 110
-target-version = "py39"
+target-version = "py310"
 extend-exclude = ["src/kirora/types.py", "src/kirora/_operations.py"]
 
 [tool.ruff.lint]
@@ -113,5 +112,5 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S105", "S106", "B017"]
 "scripts/**" = ["S310"]
-# Nested `with`, as the usage guide writes it for Python 3.9.
+# Nested `with`, as the usage guide writes it.
 "examples/**" = ["SIM117"]
