@@ -8,14 +8,14 @@ raise ``ValueError`` or ``TypeError`` instead, before anything is sent.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
 
 from typing_extensions import Literal
 
 from ._error_codes import ERROR_CODES
 
 if TYPE_CHECKING:
-    from ._response import RateLimit
+    from ._response import RateLimit, ResponseInfo
     from .types import FieldError
 
 __all__ = [
@@ -37,10 +37,22 @@ __all__ = [
 ]
 
 _KNOWN_CODES = frozenset(ERROR_CODES)
+_NOT_RETRYABLE_5XX = frozenset({501, 505})
 
 
 class KiroraException(Exception):
     """The base of every error the SDK raises, so one ``except`` can catch them all."""
+
+    def __reduce__(self) -> Tuple[Any, ...]:
+        return (_restore, (type(self), self.args, self.__dict__))
+
+
+def _restore(cls: Type[KiroraException], args: Tuple[Any, ...], state: Dict[str, Any]) -> KiroraException:
+    """Rebuilds an unpickled error without calling its ``__init__``."""
+    error = cls.__new__(cls)
+    error.args = args
+    error.__dict__.update(state)
+    return error
 
 
 class KiroraError(KiroraException):
@@ -60,6 +72,7 @@ class KiroraError(KiroraException):
             seconds, from ``Retry-After``.
         rate_limit: The rate limit the response reported, if it had valid
             ``RateLimit-*`` headers.
+        last_response: The HTTP response the error came from.
     """
 
     def __init__(
@@ -73,6 +86,7 @@ class KiroraError(KiroraException):
         request_id: Optional[str] = None,
         retry_after: Optional[float] = None,
         rate_limit: Optional[RateLimit] = None,
+        last_response: Optional[ResponseInfo] = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -83,6 +97,7 @@ class KiroraError(KiroraException):
         self.request_id = request_id
         self.retry_after = retry_after
         self.rate_limit = rate_limit
+        self.last_response = last_response
 
     def __str__(self) -> str:
         suffix = f" (request {self.request_id})" if self.request_id else ""
@@ -100,11 +115,15 @@ class KiroraError(KiroraException):
 
     @property
     def is_retryable(self) -> bool:
-        """Whether the same request might succeed later: a 429, a 5xx, or
-        ``IDEMPOTENCY_KEY_IN_USE`` while an earlier request with the same key is still
-        running. A write repeated without an idempotency key can still be applied twice.
+        """Whether the same request might succeed later: a 429, a 5xx other than 501
+        and 505, or ``IDEMPOTENCY_KEY_IN_USE``. A write repeated without an idempotency
+        key can still be applied twice.
         """
-        return self.status == 429 or self.status >= 500 or self.code == "IDEMPOTENCY_KEY_IN_USE"
+        return (
+            self.status == 429
+            or (self.status >= 500 and self.status not in _NOT_RETRYABLE_5XX)
+            or self.code == "IDEMPOTENCY_KEY_IN_USE"
+        )
 
 
 class BadRequestError(KiroraError):
@@ -156,13 +175,16 @@ class KiroraConnectionError(KiroraException):
     """A request that got no complete response, such as after a network error, or a
     connection that dropped while the body was read. ``__cause__`` holds the underlying
     error.
+
+    Attributes:
+        request_sent: False if the request never reached the API, so it's safe to send
+            again.
     """
 
     def __init__(self, operation: str, cause: BaseException, *, unsent: bool = False) -> None:
         super().__init__(f"{operation} failed: {str(cause) or type(cause).__name__}")
         self.__cause__ = cause
-        # Whether the connection was never made, so the API never saw the request.
-        self._unsent = unsent
+        self.request_sent = not unsent
 
 
 class KiroraTimeoutError(KiroraConnectionError):

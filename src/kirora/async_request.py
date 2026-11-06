@@ -24,8 +24,7 @@ _async_sleep = anyio.sleep
 
 class AsyncRequest:
     """One call, as ``Request`` makes it, awaited. Without an ``async_http_client`` on
-    the client, each call opens its own ``httpx.AsyncClient``, which works in any event
-    loop; pass one to share connections between calls."""
+    the client, it uses the one opened for the running event loop."""
 
     def __init__(
         self, client: Kirora, method: str, path: str, options: Mapping[str, Any], shape: Shape
@@ -42,8 +41,7 @@ class AsyncRequest:
 
     @asynccontextmanager
     async def open(self) -> AsyncIterator[httpx.Response]:
-        """Performs a ``"raw"`` call and yields its unread response, closing it, and any
-        client opened for it, when the block ends."""
+        """Performs a ``"raw"`` call and yields its unread response."""
         async with self._connections.use_async() as http:
             response: httpx.Response = await self._perform(http)
             try:

@@ -11,7 +11,7 @@ isn't published yet. With ``--check``, nothing is written: it exits with 1 if an
 generated file is out of date.
 
 A download is cached in ``.cache/kirora-openapi``, under its checksum, so later runs work
-offline. Uses the standard library only.
+offline. Uses the standard library, and ruff to format what it writes.
 """
 
 from __future__ import annotations
@@ -21,10 +21,11 @@ import json
 import keyword
 import os
 import re
+import subprocess
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "src" / "kirora"
@@ -128,9 +129,31 @@ NAMED_ENUMS = {
 }
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     sys.stderr.write(message + "\n")
     sys.exit(1)
+
+
+def ruff_format(path: Path, source: str) -> str:
+    """Formats ``source`` with ruff, as the file at ``path``."""
+    result = subprocess.run(
+        [sys.executable, "-m", "ruff", "format", "--stdin-filename", str(path), "-"],
+        input=source.encode("utf-8"),
+        capture_output=True,
+        cwd=ROOT,
+        check=False,
+    )
+    if result.returncode != 0:
+        fail(f"ruff couldn't format {path.relative_to(ROOT)}: {result.stderr.decode('utf-8', 'replace')}")
+    return result.stdout.decode("utf-8").replace("\r\n", "\n")
+
+
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def write(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8", newline="\n")
 
 
 def sha256(data: bytes) -> str:
@@ -138,9 +161,9 @@ def sha256(data: bytes) -> str:
 
 
 def load_spec(spec_arg: str | None) -> tuple[dict[str, Any], str]:
-    source = json.loads((ROOT / "spec" / "source.json").read_text())
+    source = json.loads((ROOT / "spec" / "source.json").read_text(encoding="utf-8"))
     if spec_arg is not None:
-        return json.loads(Path(spec_arg).read_text()), spec_arg
+        return json.loads(Path(spec_arg).read_text(encoding="utf-8")), spec_arg
     cache_dir = ROOT / ".cache" / "kirora-openapi"
     cached = cache_dir / f"{source['sha256']}.json"
     data: bytes | None = None
@@ -153,13 +176,15 @@ def load_spec(spec_arg: str | None) -> tuple[dict[str, Any], str]:
         with urllib.request.urlopen(source["url"], timeout=60) as response:
             data = response.read()
         downloaded = True
-    spec = json.loads(data)
     digest = sha256(data)
-    if digest != source["sha256"] or spec["info"]["version"] != source["version"]:
+    if digest != source["sha256"]:
         fail(
-            f"{source['url']} doesn't match spec/source.json. Set its version to "
-            f"{spec['info']['version']} and its sha256 to {digest}."
+            f"{source['url']} doesn't match spec/source.json. "
+            f"Set its sha256 to {digest}, and check its version."
         )
+    spec = json.loads(data)
+    if spec["info"]["version"] != source["version"]:
+        fail(f"{source['url']} is version {spec['info']['version']}: set it in spec/source.json.")
     if downloaded:
         cache_dir.mkdir(parents=True, exist_ok=True)
         cached.write_bytes(data)
@@ -615,21 +640,17 @@ def main() -> None:
     outputs = {
         PACKAGE / "_error_codes.py": const_tuple("ERROR_CODES", error_codes),
         PACKAGE / "_webhook_events.py": const_tuple("WEBHOOK_EVENTS", webhook_events),
-        PACKAGE / "_operations.py": operations_file(spec),
+        PACKAGE / "_operations.py": ruff_format(PACKAGE / "_operations.py", operations_file(spec)),
         PACKAGE / "types.py": prune_and_generate(spec),
     }
     if check:
-        stale = [
-            str(path.relative_to(ROOT))
-            for path, content in outputs.items()
-            if not path.exists() or path.read_text() != content
-        ]
+        stale = [str(path.relative_to(ROOT)) for path, content in outputs.items() if read(path) != content]
         if stale:
             fail(f"Out of date with {spec_name}: {', '.join(stale)}. Run `python scripts/codegen.py`.")
         print("Generated files are up to date")
         return
     for path, content in outputs.items():
-        path.write_text(content)
+        write(path, content)
     print(
         f"Wrote {len(error_codes)} error codes, {len(webhook_events)} webhook events, "
         "the models and the retry table"

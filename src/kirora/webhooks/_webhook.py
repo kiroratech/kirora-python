@@ -41,13 +41,13 @@ class WebhookHeaders:
     attempt: int
     """Which delivery attempt this is, from 1."""
     timestamp: str
-    """Seconds since the epoch. Pass it to ``verify_webhook_signature()`` as it is."""
+    """Seconds since the epoch. Pass it to ``Webhooks.assert_signature()`` as it is."""
     signature: str
 
 
 @dataclass(frozen=True)
 class VerifiedWebhook:
-    """A webhook that passed ``assert_webhook()``."""
+    """A webhook that passed ``Webhooks.assert_valid()``."""
 
     headers: WebhookHeaders
     """The request's headers, whose ``event`` and ``event_id`` match the body's."""

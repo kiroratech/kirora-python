@@ -109,9 +109,10 @@ item. It makes no request until you do either. In a Trio application, use
 `trio.run(main)`. Use the `_async` methods in async request handlers, so SDK calls
 don't block the event loop.
 
-Each async call opens its own connection, which works in any event loop; the pages of
-one `async for` over a list share one. To share connections between calls, set `kirora.default_async_http_client` to an
-`httpx.AsyncClient`; see [settings](#settings).
+The SDK opens one `httpx.AsyncClient` for each event loop it's used in, and reuses its
+connections for every later call in that loop. To use your own, such as one with a
+proxy, set `kirora.default_async_http_client`; see [settings](#settings). A `Kirora`
+client closes the one it opened with `await client.aclose()`, or `async with`.
 
 ## Usage
 
@@ -286,7 +287,7 @@ kirora.max_retries = 2
 | `kirora.base_url`                  | `KIRORA_BASE_URL` or `https://api.kirora.io` | Set the API host, without `/v1`.                                          |
 | `kirora.app_info`                  | None                                         | Add your app to the `User-Agent`: `{"name": "shop", "version": "1.2.0"}`. |
 | `kirora.default_http_client`       | One the SDK opens                            | An `httpx.Client` for the sync methods, such as one with a proxy.         |
-| `kirora.default_async_http_client` | One per call                                 | An `httpx.AsyncClient` the `_async` methods share.                        |
+| `kirora.default_async_http_client` | One per event loop                           | An `httpx.AsyncClient` the `_async` methods share.                        |
 
 Each method also takes options for that call alone: `timeout`, `max_retries`,
 `workspace` and `headers`, and `idempotency_key` where its endpoint takes one. For
@@ -359,6 +360,7 @@ The [usage guide](docs/usage.md) covers:
 | The call takes longer than `timeout`      | The timeout applies per attempt: check `max_retries` and `max_retry_delay`. A sync attempt can also wait out one stalled network read. |
 | A batch succeeds but some work is missing | Inspect every entry in `results` for an `error`.                                                                                       |
 | A webhook fails verification              | Pass the unchanged raw body and the endpoint's webhook secret. See [verification diagnostics](docs/usage.md#verification-diagnostics). |
+| You need to see each attempt and retry    | Set `KIRORA_LOG=debug`, or configure the `kirora` logger. See [logging](docs/usage.md#logging).                                       |
 
 ## Compatibility
 

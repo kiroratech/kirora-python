@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import datetime as _dt
 import email.utils
+import ipaddress
 import json
 import random
 import re
 import sys
+import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Mapping, Optional, Tuple, Union, cast
 
 import httpx
 from typing_extensions import Literal, NotRequired, Required, TypedDict
 
+from ._logs import logger
 from ._response import RateLimit, ResponseInfo, with_response
 from ._retry import (
     may_have_run,
@@ -97,7 +100,7 @@ CALL_OPTIONS = frozenset(IdempotentCallOptions.__annotations__)
 REQUEST_OPTIONS = frozenset(RequestOptions.__annotations__)
 
 
-def check_options(options: Mapping[str, Any], allowed: frozenset = CALL_OPTIONS) -> None:  # type: ignore[type-arg]
+def check_options(options: Mapping[str, Any], allowed: FrozenSet[str] = CALL_OPTIONS) -> None:
     unknown = sorted(set(options) - allowed)
     if unknown:
         raise TypeError(f"unexpected keyword argument {unknown[0]!r}")
@@ -141,15 +144,39 @@ class Attempts:
             and isinstance(error, KiroraError)
             and error.status == 404
         ):
+            logger.debug(
+                "%s: 404 after an earlier attempt that may have deleted it, so counted as done",
+                self.prepared.operation,
+            )
             return None
         self.may_have_run = self.may_have_run or may_have_run(error)
         if self.attempt > self.max_retries or not should_retry(error, self.prepared.repeatable):
+            self._log_stop(error)
             raise error
         wait = self._backoff(error)
         if wait is None:
+            self._log_stop(error)
             raise error
+        logger.info(
+            "%s: attempt %d of %d failed (%s: %s), retrying in %.2fs",
+            self.prepared.operation,
+            self.attempt,
+            self.max_retries + 1,
+            type(error).__name__,
+            error,
+            wait,
+        )
         self.attempt += 1
         return wait
+
+    def _log_stop(self, error: KiroraException) -> None:
+        logger.debug(
+            "%s: attempt %d failed (%s: %s), not retrying",
+            self.prepared.operation,
+            self.attempt,
+            type(error).__name__,
+            error,
+        )
 
     def _backoff(self, error: BaseException) -> Optional[float]:
         retry_after = error.retry_after if isinstance(error, KiroraError) else None
@@ -164,6 +191,13 @@ class Attempts:
     def request_for(self, http: Any) -> httpx.Request:
         """The request for one attempt, built by ``http``, a sync or async httpx client."""
         prepared = self.prepared
+        logger.debug(
+            "%s: attempt %d of %d, idempotency key %s",
+            prepared.operation,
+            self.attempt,
+            self.max_retries + 1,
+            prepared.headers.get("idempotency-key"),
+        )
         return cast(
             httpx.Request,
             http.build_request(
@@ -195,6 +229,12 @@ class Attempts:
         """Whether to give the caller ``response`` unread, from ``request_raw()``. Raises
         for a redirect, and for a body too large to read."""
         prepared = self.prepared
+        logger.debug(
+            "%s: %d, request id %s",
+            prepared.operation,
+            response.status_code,
+            response.headers.get("x-request-id"),
+        )
         if 300 <= response.status_code < 400 and response.status_code != 304:
             location = response.headers.get("location")
             raise KiroraResponseError(
@@ -265,14 +305,17 @@ def _parse(prepared: Prepared, response: httpx.Response, body: bytearray, shape:
         payload = payload["data"]
     if shape == "page" and not _is_page(payload):
         raise invalid("without a page of `data` and `meta.pagination`")
-    info = ResponseInfo(
+    return payload, _response_info(response)
+
+
+def _response_info(response: httpx.Response) -> ResponseInfo:
+    return ResponseInfo(
         status=response.status_code,
         headers=response.headers,
-        request_id=request_id,
+        request_id=response.headers.get("x-request-id"),
         idempotency_replay=response.headers.get("idempotency-replay") == "true",
         rate_limit=_parse_rate_limit(response.headers),
     )
-    return payload, info
 
 
 _CODES_BY_STATUS = {
@@ -313,6 +356,7 @@ def _to_api_error(response: httpx.Response, payload: Any) -> KiroraError:
         request_id=response.headers.get("x-request-id") or string(error.get("requestId")),
         retry_after=_parse_retry_after(response.headers.get("retry-after")),
         rate_limit=_parse_rate_limit(response.headers),
+        last_response=_response_info(response),
     )
 
 
@@ -419,6 +463,21 @@ def _check_base_url(name: str, base_url: str) -> None:
         raise ValueError(f"{name} must be an absolute http or https URL, not {base_url!r}")
     if "?" in base_url or "#" in base_url:
         raise ValueError(f"{name} can't have a query or fragment: {base_url!r}")
+    if url.scheme == "http" and not _is_loopback(url.host):
+        warnings.warn(
+            f"{name} {base_url!r} is plain http, which sends your API key unencrypted: use https",
+            UserWarning,
+            stacklevel=3,
+        )
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _check_timeout(value: Any) -> float:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Dict, NamedTuple, Optional
 
+
 class Operation(NamedTuple):
     """How an operation may be retried, from the spec's ``x-retry``."""
 
@@ -56,7 +57,9 @@ OPERATIONS: Dict[str, Operation] = {
     "GET /v1/contacts/{id}/export": Operation("getContactExport", "read", False, None),
     "GET /v1/contacts/{id}/installations": Operation("listPushInstallations", "read", False, None),
     "POST /v1/contacts/{id}/installations": Operation("registerPushInstallation", "converges", True, None),
-    "DELETE /v1/contacts/{id}/installations/{externalInstallationId}": Operation("deletePushInstallation", "converges", False, None),
+    "DELETE /v1/contacts/{id}/installations/{externalInstallationId}": Operation(
+        "deletePushInstallation", "converges", False, None
+    ),
     "GET /v1/contacts/{id}/journeys": Operation("listContactJourneys", "read", False, None),
     "GET /v1/contacts/{id}/lists": Operation("listContactLists", "read", False, None),
     "POST /v1/contacts/{id}/merge": Operation("mergeContacts", "done", True, None),
@@ -133,7 +136,9 @@ OPERATIONS: Dict[str, Operation] = {
     "PATCH /v1/segments/{id}": Operation("updateSegment", "converges", False, None),
     "DELETE /v1/segments/{id}": Operation("deleteSegment", "done", False, None),
     "GET /v1/segments/{id}/contacts": Operation("listSegmentContacts", "read", False, None),
-    "GET /v1/segments/{id}/membership-changes": Operation("listSegmentMembershipChanges", "read", False, None),
+    "GET /v1/segments/{id}/membership-changes": Operation(
+        "listSegmentMembershipChanges", "read", False, None
+    ),
     "GET /v1/segments/{id}/size-history": Operation("getSegmentSizeHistory", "read", False, None),
     "GET /v1/segments/{id}/usage": Operation("getSegmentUsage", "read", False, None),
     "GET /v1/senders": Operation("listSenders", "read", False, None),
@@ -170,19 +175,27 @@ OPERATIONS: Dict[str, Operation] = {
     "POST /v1/templates/{id}/render": Operation("renderTemplate", "read", False, None),
     "GET /v1/templates/{id}/versions": Operation("listTemplateVersions", "read", False, None),
     "GET /v1/templates/{id}/versions/{version}": Operation("getTemplateVersion", "read", False, None),
-    "POST /v1/templates/{id}/versions/{version}/restore": Operation("restoreTemplateVersion", "converges", True, None),
+    "POST /v1/templates/{id}/versions/{version}/restore": Operation(
+        "restoreTemplateVersion", "converges", True, None
+    ),
     "GET /v1/topics": Operation("listTopics", "read", False, None),
     "POST /v1/topics": Operation("createTopic", "unique", True, None),
     "GET /v1/topics/{id}": Operation("getTopic", "read", False, None),
     "PATCH /v1/topics/{id}": Operation("updateTopic", "converges", False, None),
     "DELETE /v1/topics/{id}": Operation("deleteTopic", "done", False, None),
     "POST /v1/transactional/messages": Operation("sendTransactionalMessage", "key", True, None),
-    "POST /v1/transactional/messages/batch": Operation("sendTransactionalMessagesBatch", "entries", False, "messages"),
-    "POST /v1/transactional/messages/{id}/cancel": Operation("cancelScheduledTransactionalMessage", "state", True, None),
+    "POST /v1/transactional/messages/batch": Operation(
+        "sendTransactionalMessagesBatch", "entries", False, "messages"
+    ),
+    "POST /v1/transactional/messages/{id}/cancel": Operation(
+        "cancelScheduledTransactionalMessage", "state", True, None
+    ),
     "GET /v1/webhooks": Operation("listWebhooks", "read", False, None),
     "POST /v1/webhooks": Operation("createWebhook", "unique", True, None),
     "GET /v1/webhooks/deliveries": Operation("listWebhookDeliveries", "read", False, None),
-    "POST /v1/webhooks/deliveries/{deliveryId}/redeliver": Operation("redeliverWebhookDelivery", "unsafe", True, None),
+    "POST /v1/webhooks/deliveries/{deliveryId}/redeliver": Operation(
+        "redeliverWebhookDelivery", "unsafe", True, None
+    ),
     "GET /v1/webhooks/deliveries/{id}": Operation("getWebhookDelivery", "read", False, None),
     "GET /v1/webhooks/events": Operation("listWebhookEvents", "read", False, None),
     "GET /v1/webhooks/{id}": Operation("getWebhook", "read", False, None),
@@ -195,7 +208,9 @@ OPERATIONS: Dict[str, Operation] = {
     "GET /v1/workspaces/{externalId}": Operation("getWorkspace", "read", False, None),
     "PATCH /v1/workspaces/{externalId}": Operation("updateWorkspace", "converges", False, None),
     "DELETE /v1/workspaces/{externalId}": Operation("deleteWorkspace", "state", False, None),
-    "POST /v1/workspaces/{externalId}/cancel-deletion": Operation("cancelWorkspaceDeletion", "state", True, None),
+    "POST /v1/workspaces/{externalId}/cancel-deletion": Operation(
+        "cancelWorkspaceDeletion", "state", True, None
+    ),
     "POST /v1/workspaces/{externalId}/resume": Operation("resumeWorkspace", "state", True, None),
     "POST /v1/workspaces/{externalId}/suspend": Operation("suspendWorkspace", "state", True, None),
 }

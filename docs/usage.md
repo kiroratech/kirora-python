@@ -15,6 +15,7 @@ The snippets assume `import kirora`, with `KIRORA_API_KEY` set. The
 - [Settings](#settings)
 - [Retries and idempotency](#retries-and-idempotency)
 - [Async](#async)
+- [Logging](#logging)
 - [Webhooks](#webhooks)
 - [Batch requests](#batch-requests)
 - [Response details](#response-details)
@@ -256,10 +257,15 @@ except kirora.KiroraError as error:
 
 `KiroraError` has `code`, `status`, `message`, `errors` (the fields a request got wrong,
 on `VALIDATION_ERROR` and `DRAFT_INCOMPLETE`), `details`, `request_id`, `retry_after` (in
-seconds) and `rate_limit`. A code added to the API after your version of the SDK still
-comes through as a string; `error.is_known_code()` says whether it's one of
-`kirora.ERROR_CODES`. `error.is_retryable` is true for a 429, a 5xx and
-`IDEMPOTENCY_KEY_IN_USE`.
+seconds), `rate_limit` and `last_response`, the HTTP response with its headers. A code
+added to the API after your version of the SDK still comes through as a string;
+`error.is_known_code()` says whether it's one of
+`kirora.ERROR_CODES`. `error.is_retryable` is true for a 429, a 5xx other than 501 and
+505, and `IDEMPOTENCY_KEY_IN_USE`.
+
+`KiroraConnectionError.request_sent` is false when the connection was never made, so
+the API never saw the request and sending it again is safe. Every SDK error can be
+pickled, as for a task queue or a process pool.
 
 ## Settings
 
@@ -364,11 +370,35 @@ A `list_async()` fetches nothing until you await it, for the first page, or iter
 with `async for`, for every item. Awaiting and then iterating reuses the first page, and
 tasks awaiting it at once share one request.
 
-Each async call opens its own `httpx.AsyncClient`, which works in any event loop but
-doesn't reuse connections between calls; the pages of one `async for` over a list share
-one. To share one between calls, set
-`kirora.default_async_http_client`, or pass `async_http_client` to a `Kirora` client,
-and close it yourself when your application shuts down.
+Without a client of your own, the SDK opens one `httpx.AsyncClient` for each event loop
+it's used in, under asyncio or Trio, and every later call in that loop reuses its
+connections. A `Kirora` client closes the one it opened for the running loop with
+`await client.aclose()`, or at the end of `async with`:
+
+```python
+async with kirora.Kirora(api_key) as client:
+    await client.contacts.get_async("ada@example.com", id_type="email")
+```
+
+To use your own, such as one with a proxy, set `kirora.default_async_http_client`, or
+pass `async_http_client` to a `Kirora` client, and close it yourself when your
+application shuts down.
+
+## Logging
+
+The SDK logs to the `kirora` logger, with the standard `logging` module: each attempt
+and each response at `DEBUG`, and each retry, with the error that caused it and the
+wait, at `INFO`. It never logs your API key, headers or bodies; it does log each
+request's method and path, which can hold an email address used as a contact id.
+
+```python
+import logging
+
+logging.getLogger("kirora").setLevel(logging.DEBUG)
+```
+
+Or set `KIRORA_LOG` to `debug` or `info` before importing the SDK, and it logs to
+standard error itself.
 
 ## Webhooks
 

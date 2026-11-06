@@ -50,6 +50,7 @@ pyright
 ruff check src tests scripts examples
 ruff format --check src tests scripts examples
 python scripts/codegen.py --check
+python scripts/generate_async.py --check
 ```
 
 ### Updating the API spec
@@ -71,12 +72,13 @@ each resource is a package, as `src/kirora/contacts/`, with the resource class i
 
 1. Add the operation's id to `OPERATIONS` in `scripts/codegen.py`, and regenerate, so its
    types exist. A list's query parameters become `{OperationId}Params`.
-2. Add a class method to the resource class, and an `_async` one beside it with the same
-   parameters: the ids in the path first, then `params` (the body, or a list's filters),
-   then `options`. Name its request type on the class, as
-   `IdentifyParams: TypeAlias = IdentifyContactInput`. Type `options` as
-   `IdempotentCallOptions` if the operation takes an `Idempotency-Key`, and `CallOptions`
-   if not. A contact id takes `id_type` as a keyword.
+2. Add a class method to the resource class, after its other sync methods: the ids in
+   the path first, then `params` (the body, or a list's filters), then `options`. Name
+   its request type on the class, as `IdentifyParams: TypeAlias = IdentifyContactInput`.
+   Type `options` as `IdempotentCallOptions` if the operation takes an
+   `Idempotency-Key`, and `CallOptions` if not. A contact id takes `id_type` as a
+   keyword. Then run `python scripts/generate_async.py`, which writes its `_async` form
+   from it; don't edit the `_async` methods by hand, as CI fails if they're out of date.
 3. Add the call to `CALLS` in `tests/resources_test.py`, which checks that every wrapped
    operation has a method, and test it in the resource's `_test.py` and `_async_test.py`.
 4. Add or update the resource's example in `examples/`.
