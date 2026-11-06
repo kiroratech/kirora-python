@@ -29,6 +29,7 @@ jobs:
           test "v$version" = "$GITHUB_REF_NAME" || (echo "tag $GITHUB_REF_NAME, but the version is $version" && exit 1)
       - run: pip install -e ".[dev]" build twine
       - run: python scripts/codegen.py --check
+      - run: python scripts/generate_async.py --check
       - run: pytest
       - run: python -m build
       - run: twine check --strict dist/*

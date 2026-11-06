@@ -33,7 +33,12 @@ jobs:
       # The examples, checked as a user's code would be.
       - run: mypy --strict examples
       - run: pyright
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .cache/kirora-openapi
+          key: kirora-openapi-${{ hashFiles('spec/source.json') }}
       - run: python scripts/codegen.py --check
+      - run: python scripts/generate_async.py --check
 
   test:
     runs-on: ubuntu-latest
@@ -52,6 +57,9 @@ jobs:
           allow-prereleases: true
       - run: pip install -e ".[dev]"
       - run: pytest
+        if: matrix.python != '3.13'
+      - run: pytest --cov=kirora --cov-report=term-missing
+        if: matrix.python == '3.13'
 
   # The oldest dependency versions pyproject.toml allows, so its lower bounds stay true.
   minimum-dependencies:

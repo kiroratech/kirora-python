@@ -135,8 +135,7 @@ class Kirora:
         http_client: An ``httpx.Client`` for the sync methods, such as one with a proxy.
             The SDK doesn't close a client you pass. Redirects are never followed.
         async_http_client: An ``httpx.AsyncClient`` for the ``_async`` methods, shared
-            by every call. Without one, each async call opens its own, which works in any
-            event loop but doesn't reuse connections.
+            by every call. Without one, the client opens one per event loop.
     """
 
     contacts = _Bound(Contacts)
@@ -282,10 +281,16 @@ class Kirora:
             yield response
 
     def close(self) -> None:
-        """Closes the connections this client opened; a later call opens new ones.
-        Clients you passed, and a parent's connections, aren't closed."""
+        """Closes the sync connections this client opened. Clients you passed, and a
+        parent's connections, aren't closed."""
         if self._owns_connections:
             self._connections.close()
+
+    async def aclose(self) -> None:
+        """Closes the connections this client opened, including the async ones."""
+        if self._owns_connections:
+            self._connections.close()
+            await self._connections.aclose()
 
     def __enter__(self) -> Self:
         return self
@@ -297,6 +302,17 @@ class Kirora:
         tb: Optional[TracebackType],
     ) -> None:
         self.close()
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> None:
+        await self.aclose()
 
     def __repr__(self) -> str:
         return f"Kirora(base_url={self._base_url!r}, workspace={self._workspace!r})"

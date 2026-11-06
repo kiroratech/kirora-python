@@ -177,6 +177,16 @@ class TestConfiguration:
         with pytest.raises(ValueError, match="base_url"):
             Kirora(API_KEY, base_url=url)
 
+    def test_warns_of_a_plain_http_base_url_off_this_machine(self) -> None:
+        with pytest.warns(UserWarning, match="plain http"):
+            Kirora(API_KEY, base_url="http://api.example.com")
+
+    @pytest.mark.parametrize(
+        "url", ["http://localhost:8787", "http://127.0.0.1", "http://[::1]:8000", "http://api.localhost"]
+    )
+    def test_allows_plain_http_on_this_machine(self, url: str) -> None:
+        Kirora(API_KEY, base_url=url)
+
     def test_refuses_an_idempotency_key_for_every_call(self) -> None:
         with pytest.raises(ValueError, match="per call"):
             Kirora(API_KEY, headers={"Idempotency-Key": "k"})

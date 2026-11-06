@@ -35,6 +35,7 @@ from ._base_client import (
 )
 from ._client import Kirora, default_client
 from ._error_codes import ERROR_CODES
+from ._logs import configure_from_env as _configure_logging_from_env
 from ._pagination import AsyncPage, AsyncPager, Page
 from ._response import RateLimit, ResponseInfo, last_response
 from ._webhook_events import WEBHOOK_EVENTS
@@ -90,8 +91,11 @@ default_http_client: Optional[httpx.Client] = None
 """An ``httpx.Client`` for the sync methods, such as one with a proxy. When None, the SDK
 opens one and keeps it."""
 default_async_http_client: Optional[httpx.AsyncClient] = None
-"""An ``httpx.AsyncClient`` for the ``_async`` methods, shared by every call. When None,
-each async call opens its own, which works in any event loop."""
+"""An ``httpx.AsyncClient`` for the ``_async`` methods. When None, the SDK opens one per
+event loop."""
+
+
+_configure_logging_from_env()
 
 
 def me(options: Optional[CallOptions] = None) -> "types.ApiCaller":

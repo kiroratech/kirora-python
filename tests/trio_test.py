@@ -33,14 +33,28 @@ def test_a_call_a_retry_and_a_paged_iteration_under_trio() -> None:
     assert len(server.requests) == 4
 
 
-def test_a_list_iteration_opens_and_closes_its_own_client_under_trio(monkeypatch: pytest.MonkeyPatch) -> None:
-    server = Server(page([1], "c2"), page([2]))
-    server.patch_opened(monkeypatch)
+def test_reuses_one_client_in_a_trio_run_until_aclose(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = Server(page([1], "c2"), page([2]), ok({}))
+    opened = server.patch_opened(monkeypatch)
 
     async def main() -> None:
-        assert [item async for item in kirora.Kirora("sk_test").contacts.list_async()] == [1, 2]
+        client = kirora.Kirora("sk_test")
+        assert [item async for item in client.contacts.list_async()] == [1, 2]
+        await client.me_async()
+        assert len(opened) == 1 and not opened[0].is_closed
+        await client.aclose()
 
     trio.run(main)
+    assert len(opened) == 1 and opened[0].is_closed
+
+
+def test_opens_a_client_for_each_trio_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = Server(ok({}), ok({}))
+    opened = server.patch_opened(monkeypatch)
+    client = kirora.Kirora("sk_test")
+    trio.run(client.me_async)
+    trio.run(client.me_async)
+    assert len(opened) == 2
 
 
 def test_the_deadline_cancels_an_attempt_under_trio() -> None:

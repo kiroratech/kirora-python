@@ -161,7 +161,7 @@ def never_reached(error: BaseException) -> bool:
         return error.status == 429
     # Set only for a connection that was never made, including one that timed out
     # connecting or waiting for a pooled connection: a timeout once sent may have run.
-    return isinstance(error, KiroraConnectionError) and error._unsent
+    return isinstance(error, KiroraConnectionError) and not error.request_sent
 
 
 def may_have_run(error: BaseException) -> bool:
